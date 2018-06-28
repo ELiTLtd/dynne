@@ -3,8 +3,6 @@
   is arrays of doubles."
   (:require [clojure.java.io :as io]
             [hiphip.double :as dbl]
-            [incanter.core :as incanter]
-            [incanter.charts :as charts]
             [primitive-math :as p])
   (:import [java.nio ByteBuffer]
            [java.util.concurrent LinkedBlockingQueue]
@@ -573,9 +571,8 @@
 ;; don't get rid of sound.clj
 (defn play
   "Plays `s` asynchronously. Returns a value that can be passed to `stop`."
-  [s]
-  (let [sample-rate 44100
-        chans       (channels s)
+  [s sample-rate]
+  (let [chans       (channels s)
         sdl         (AudioSystem/getSourceDataLine (AudioFormat. sample-rate
                                                                  16
                                                                  chans
@@ -664,6 +661,16 @@
       (reset [] (throw (UnsupportedOperationException.)))
       (skip [n] (throw (ex-info "Not implemented" {:reason :not-implemented}))))))
 
+(defn save-to-stream
+  "Save sound `s` to `output-stream` as a 16-bit WAV at `sample-rate`."
+  [s output-stream sample-rate]
+  (AudioSystem/write (AudioInputStream.
+                      (sampled-input-stream s sample-rate)
+                      (AudioFormat. sample-rate 16 (channels s) true true)
+                      (-> s duration (* sample-rate) long))
+                     AudioFileFormat$Type/WAVE
+                     output-stream))
+
 (defn save
   "Save sound `s` to `path` as a 16-bit WAV at `sample-rate`."
   [s path sample-rate]
@@ -673,47 +680,3 @@
                       (-> s duration (* sample-rate) long))
                      AudioFileFormat$Type/WAVE
                      (io/file path)))
-
-
-;;; Visualization
-
-(defn- every-nth
-  "Given a sequence of double arrays, return a collection holding
-  every `n`th sample."
-  [arrays period]
-  (loop [remaining arrays
-         n         period
-         acc       []]
-    (let [[head & more] remaining
-          head-length (when head (dbl/alength head))]
-      (if head
-        (if (< n head-length)
-          (recur remaining (+ n period) (conj acc (dbl/aget head n)))
-          (recur more (- n head-length) acc))
-        acc))))
-
-;; TODO: There's definitely a protocol to be extracted here, assuming
-;; the continuous-time stuff lives on.
-(defn visualize
-  "Visualizes channel `c` (default 0) of `s` by plotting it on a graph."
-  ([s] (visualize s 0))
-  ([s c]
-     (let [num-data-points 4000
-           ;; For short sounds, we need to sample at a higher rate, or
-           ;; the graph won't be smooth enough. For longer sounds, we
-           ;; can get away with a lower rate.
-           sample-rate (if (< (/ num-data-points 16000) (duration s))
-                         16000
-                         44100)
-           channel-chunks (map #(nth % c) (chunks s sample-rate))
-           num-samples (-> s duration (* sample-rate) long)
-           sample-period (max 1 (-> num-samples (/ num-data-points) long))
-           indexes (range 0 num-samples sample-period)
-           times (map #(/ (double %) sample-rate) indexes)
-           samples (every-nth channel-chunks sample-period)]
-       (incanter/view (charts/xy-plot
-                       times
-                       samples
-                       :x-label "time (s)"
-                       :y-label "amplitude"
-                       :title (str "Amplitude for channel " c))))))

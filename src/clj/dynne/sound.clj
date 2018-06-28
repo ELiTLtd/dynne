@@ -11,8 +11,6 @@
 (ns dynne.sound
   "Functions for working with sounds"
   (:require [clojure.java.io :as io]
-            [incanter.core :as incanter]
-            [incanter.charts :as charts]
             [primitive-math :as p])
   (:import [javax.sound.sampled
             AudioFileFormat$Type
@@ -541,18 +539,3 @@
                       (-> s duration (* sample-rate) long))
                      AudioFileFormat$Type/WAVE
                      (io/file path)))
-
-
-;;; Visualization
-
-(defn visualize
-  "Visualizes `s` by plottig it on a graph."
-  ([^ISound s] (visualize s 0))
-  ([^ISound s ^long c]
-     (let [duration (duration s)]
-       ;; TODO: Maybe use a function that shows power in a window
-       ;; around time t rather than just the sample
-       (incanter/view (charts/function-plot #(sample s ^double % c)
-                                            0.0
-                                            duration
-                                            :step-size (/ duration 4000.0))))))
